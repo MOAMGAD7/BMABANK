@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<AnchorPane xmlns="http://javafx.com/javafx/23.0.1"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.banking.ChatBotController"
+            style="-fx-background-color: #0f0f0f;">
+
+    <VBox prefWidth="600" prefHeight="400" spacing="10"
+          AnchorPane.topAnchor="20.0" AnchorPane.leftAnchor="20.0" AnchorPane.rightAnchor="20.0" AnchorPane.bottomAnchor="20.0">
+
+        <Label text="AI Chat Support"
+               style="-fx-font-size: 24px; -fx-text-fill: #00ff88; -fx-font-weight: bold;" />
+
+        <ScrollPane fitToWidth="true" prefHeight="280" style="-fx-background: transparent;">
+            <content>
+                <VBox fx:id="chatBox" spacing="10"
+                      style="-fx-background-color: #1a1a1a; -fx-background-radius: 10;">
+                    <padding>
+                        <Insets top="10" right="10" bottom="10" left="10"/>
+                    </padding>
+                </VBox>
+            </content>
+        </ScrollPane>
+
+        <HBox spacing="10">
+            <TextField fx:id="userInput" promptText="Type your message..." HBox.hgrow="ALWAYS"
+                       style="-fx-background-color: #222; -fx-text-fill: white; -fx-prompt-text-fill: gray;" />
+            <Button text="Send" onAction="#handleSend"
+                    style="-fx-background-color: #00ff88; -fx-text-fill: black; -fx-font-weight: bold; -fx-background-radius: 10;" />
+        </HBox>
+    </VBox>
+
+</AnchorPane>

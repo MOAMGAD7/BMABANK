@@ -8,7 +8,7 @@ import java.security.spec.InvalidKeySpecException;
 import java.sql.*;
 import java.util.Base64;
 
-class database_BankSystem {
+ class database_BankSystem {
     private static final String DB_URL = "jdbc:sqlite:bank.db";
 
     public static void createTables() {

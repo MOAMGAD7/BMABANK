@@ -6,35 +6,42 @@
 <?import javafx.scene.control.Hyperlink?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.PasswordField?>
-<?import javafx.scene.control.RadioButton?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.AnchorPane?>
-<?import javafx.scene.layout.FlowPane?>
 <?import javafx.scene.layout.VBox?>
 
-<AnchorPane xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.banking.SignupController">
-    <VBox alignment="CENTER" layoutX="50" layoutY="20" prefHeight="600" prefWidth="500" spacing="10">
-        <Label style="-fx-font-size: 22px; -fx-font-weight: bold;" text="Create Your Account" />
+<AnchorPane style="-fx-background-image: url('file:src/main/resources/360_F_439136084_fKgadjwAYOpZzJfAiqfxJt1dRv3YOl6u.png');                    -fx-background-size: cover;                    -fx-background-repeat: no-repeat;                    -fx-background-position: center;" xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.banking.SignupController">
+
+    <VBox alignment="CENTER_LEFT" prefHeight="720.0" prefWidth="550.0" spacing="10" style="-fx-background-radius: 20; -fx-padding: 30;" AnchorPane.bottomAnchor="0.7999999999999545" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.7999999999999545" AnchorPane.topAnchor="0.0">
+
+        <Label style="-fx-font-size: 22px; -fx-font-weight: bold; -fx-text-fill: #00ff88;" text="Create Your Account" />
 
         <TextField fx:id="nameField" maxWidth="300" promptText="Full Name" />
+        <Label fx:id="nameError" textFill="red" />
+
         <TextField fx:id="usernameField" maxWidth="300" promptText="Username" />
+        <Label fx:id="usernameError" textFill="red" />
+
         <PasswordField fx:id="passwordField" maxWidth="300" promptText="Password" />
+        <Label fx:id="passwordError" textFill="red" />
+
         <TextField fx:id="emailField" maxWidth="300" promptText="Email" />
+        <Label fx:id="emailError" textFill="red" />
+
         <TextField fx:id="mobileField" maxWidth="300" promptText="Mobile Number" />
+        <Label fx:id="mobileError" textFill="red" />
+
         <TextField fx:id="nationalIdField" maxWidth="300" promptText="National ID" />
+        <Label fx:id="nationalIdError" textFill="red" />
+
         <DatePicker fx:id="dobPicker" maxWidth="300" promptText="Date of Birth" />
 
-        <Button maxWidth="300" onAction="#handleSignup" style="-fx-background-color: #4CAF50; -fx-text-fill: white;" text="Sign Up" />
-        <Hyperlink onAction="#switchToLogin" text="Already have an account? Log in" />
-      <FlowPane prefHeight="74.0" prefWidth="500.0">
-         <children>
-            <RadioButton mnemonicParsing="false" text="RadioButton" />
-            <RadioButton layoutX="10.0" layoutY="10.0" mnemonicParsing="false" text="RadioButton">
-               <FlowPane.margin>
-                  <Insets bottom="6.0" left="6.0" right="6.0" top="6.0" />
-               </FlowPane.margin>
-            </RadioButton>
-         </children>
-      </FlowPane>
+        <Button fx:id="signupButton" disable="true" maxWidth="300" onAction="#handleSignup" style="-fx-background-color: #00ff88; -fx-text-fill: black; -fx-font-weight: bold; -fx-background-radius: 10;" text="Sign Up" />
+
+        <Hyperlink onAction="#switchToLogin" text="Already have an account? Log in" textFill="#00ff88" />
+      <padding>
+         <Insets left="40.0" />
+      </padding>
+
     </VBox>
 </AnchorPane>
