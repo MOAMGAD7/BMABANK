@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.geometry.Insets?>
+
+<AnchorPane xmlns:fx="http://javafx.com/fxml" fx:controller="com.banking.LoginController">
+    <VBox alignment="CENTER" spacing="15" prefWidth="400" prefHeight="400" layoutX="100" layoutY="50">
+        <Label text="Welcome to Your Bank" style="-fx-font-size: 24px; -fx-font-weight: bold;" />
+
+        <TextField fx:id="usernameField" promptText="Username" maxWidth="250" />
+        <PasswordField fx:id="passwordField" promptText="Password" maxWidth="250" />
+
+        <Button text="Login" onAction="#handleLogin" maxWidth="250" style="-fx-background-color: #2196F3; -fx-text-fill: white;" />
+        <Hyperlink text="Don't have an account? Sign up" onAction="#switchToSignup" />
+    </VBox>
+</AnchorPane>
