@@ -1,4 +1,5 @@
 package com.banking;
+
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.event.ActionEvent;
@@ -8,9 +9,13 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.stage.Stage;
+
+import java.io.File;
 import java.io.IOException;
-import java.util.regex.Pattern;
+
 public class SignupController {
 
     @FXML private TextField nameField;
@@ -20,7 +25,9 @@ public class SignupController {
     @FXML private DatePicker dobPicker;
     @FXML private TextField usernameField;
     @FXML private PasswordField passwordField;
-
+    @FXML private TextField imagePathField;
+    @FXML private ImageView imageView;
+    @FXML private TextField tb;
     @FXML private Label nameError, usernameError, passwordError, emailError, mobileError, nationalIdError;
     @FXML private Button signupButton;
 
@@ -34,15 +41,33 @@ public class SignupController {
         emailField.textProperty().addListener(validator);
         mobileField.textProperty().addListener(validator);
         nationalIdField.textProperty().addListener(validator);
+        imagePathField.textProperty().addListener((obs, oldVal, newVal) -> {
+            validateForm();
+            updateImageView(newVal);
+        });
         dobPicker.valueProperty().addListener((obs, oldVal, newVal) -> validateForm());
 
         validateForm();
     }
 
+    private void updateImageView(String path) {
+        try {
+            if (path != null && !path.trim().isEmpty()) {
+                String url = "file:/" + path.trim().replace("\\", "/").replace(" ", "%20");
+                Image img = new Image(url, true);
+                imageView.setImage(img);
+            } else {
+                imageView.setImage(null);
+            }
+        } catch (Exception e) {
+            imageView.setImage(null);
+        }
+    }
+
     private void validateForm() {
         boolean valid = true;
 
-        if (!nameField.getText().matches("[a-zA-Z\s]{3,}")) {
+        if (!nameField.getText().matches("[a-zA-Z\\s]{3,}")) {
             nameError.setText("Enter a valid name (letters only)");
             valid = false;
         } else nameError.setText("");
@@ -76,19 +101,30 @@ public class SignupController {
             valid = false;
         }
 
+        if (!imagePathField.getText().toLowerCase().endsWith(".png") && !imagePathField.getText().toLowerCase().endsWith(".jpg")) {
+            valid = false;
+        }
+
         signupButton.setDisable(!valid);
     }
 
     @FXML
     protected void handleSignup(ActionEvent event) {
         try {
+            String imagePath = imagePathField.getText();
+            if (!imagePath.toLowerCase().endsWith(".png") && !imagePath.toLowerCase().endsWith(".jpg")) {
+                showAlert("Error", "Image must be in .png or .jpg format");
+                return;
+            }
+
             boolean isRegistered = database_BankSystem.registerUser(
                     usernameField.getText(),
                     passwordField.getText(),
                     nameField.getText(),
                     emailField.getText(),
                     mobileField.getText(),
-                    nationalIdField.getText()
+                    nationalIdField.getText(),
+                    imagePath
             );
 
             if (isRegistered) {

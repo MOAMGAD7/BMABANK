@@ -46,7 +46,7 @@ public class LoginController {
 
     @FXML
     protected void switchToSignup(ActionEvent event) throws IOException {
-        Parent root = FXMLLoader.load(getClass().getResource("/com/example/maged/login.fxml"));
+        Parent root = FXMLLoader.load(getClass().getResource("/com/example/maged/Signup.fxml"));
 
         Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
         stage.setScene(new Scene(root));

@@ -8,7 +8,7 @@ import java.security.spec.InvalidKeySpecException;
 import java.sql.*;
 import java.util.Base64;
 
- class database_BankSystem {
+class database_BankSystem {
     private static final String DB_URL = "jdbc:sqlite:bank.db";
 
     public static void createTables() {
@@ -22,7 +22,8 @@ import java.util.Base64;
                     "full_name TEXT," +
                     "email TEXT," +
                     "mobile TEXT," +
-                    "national_id TEXT" +
+                    "national_id TEXT," +
+                    "profile_image TEXT" +  // ← أضفنا العمود ده
                     ");";
 
             String transactionsTable = "CREATE TABLE IF NOT EXISTS transactions (" +
@@ -63,13 +64,13 @@ import java.util.Base64;
     }
 
     public static boolean registerUser(String username, String password, String name, String email,
-                                       String mobile, String nationalId) {
+                                       String mobile, String nationalId, String imagePath) {
         try {
-            String hashedPassword = hashPassword(password);  // تغيير هنا لعدم الحاجة لـ salt
+            String hashedPassword = hashPassword(password);
 
             Connection conn = DriverManager.getConnection("jdbc:sqlite:bank.db");
-            String sql = "INSERT INTO users (username, password, full_name, email, mobile, national_id) " +
-                    "VALUES (?, ?, ?, ?, ?, ?)";
+            String sql = "INSERT INTO users (username, password, full_name, email, mobile, national_id, profile_image) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)";
             PreparedStatement pstmt = conn.prepareStatement(sql);
             pstmt.setString(1, username);
             pstmt.setString(2, hashedPassword);
@@ -77,6 +78,7 @@ import java.util.Base64;
             pstmt.setString(4, email);
             pstmt.setString(5, mobile);
             pstmt.setString(6, nationalId);
+            pstmt.setString(7, imagePath);  // ← حفظ مسار الصورة
             pstmt.executeUpdate();
 
             pstmt.close();
@@ -98,7 +100,7 @@ import java.util.Base64;
 
             if (rs.next()) {
                 String storedHash = rs.getString("password");
-                return storedHash.equals(hashPassword(password));  // تغيير هنا لعدم الحاجة لـ salt
+                return storedHash.equals(hashPassword(password));
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -108,7 +110,7 @@ import java.util.Base64;
 
     private static String hashPassword(String password) {
         try {
-            PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), new byte[16], 65536, 128);  // حذف salt هنا
+            PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), new byte[16], 65536, 128);
             SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
             byte[] hash = skf.generateSecret(spec).getEncoded();
             return Base64.getEncoder().encodeToString(hash);

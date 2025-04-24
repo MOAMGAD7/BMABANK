@@ -7,10 +7,11 @@
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.PasswordField?>
 <?import javafx.scene.control.TextField?>
+<?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.AnchorPane?>
 <?import javafx.scene.layout.VBox?>
 
-<AnchorPane style="-fx-background-image: url('file:src/main/resources/360_F_439136084_fKgadjwAYOpZzJfAiqfxJt1dRv3YOl6u.png');                    -fx-background-size: cover;                    -fx-background-repeat: no-repeat;                    -fx-background-position: center;" xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.banking.SignupController">
+<AnchorPane style="-fx-background-image: url('file:src/main/resources/360_F_439136084_fKgadjwAYOpZzJfAiqfxJt1dRv3YOl6u.png'); -fx-background-size: cover; -fx-background-repeat: no-repeat; -fx-background-position: center;" xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.banking.SignupController">
 
     <VBox alignment="CENTER_LEFT" prefHeight="720.0" prefWidth="550.0" spacing="10" style="-fx-background-radius: 20; -fx-padding: 30;" AnchorPane.bottomAnchor="0.7999999999999545" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.7999999999999545" AnchorPane.topAnchor="0.0">
 
@@ -36,12 +37,19 @@
 
         <DatePicker fx:id="dobPicker" maxWidth="300" promptText="Date of Birth" />
 
+        <!-- عرض الصورة بناءً على المسار -->
+        <ImageView fx:id="imageView" fitHeight="150.0" fitWidth="200.0" pickOnBounds="true" preserveRatio="true" />
+
+        <!-- 🔽 جديد: مسار الصورة -->
+        <TextField fx:id="imagePathField" maxWidth="300" promptText="Profile Image Path (.png)" />
+      <TextField fx:id="tb" layoutX="40.0" layoutY="147.0" maxWidth="300" promptText="TOTAL BALANCE " />
+
         <Button fx:id="signupButton" disable="true" maxWidth="300" onAction="#handleSignup" style="-fx-background-color: #00ff88; -fx-text-fill: black; -fx-font-weight: bold; -fx-background-radius: 10;" text="Sign Up" />
 
         <Hyperlink onAction="#switchToLogin" text="Already have an account? Log in" textFill="#00ff88" />
-      <padding>
-         <Insets left="40.0" />
-      </padding>
 
+        <padding>
+            <Insets left="40.0" />
+        </padding>
     </VBox>
 </AnchorPane>
