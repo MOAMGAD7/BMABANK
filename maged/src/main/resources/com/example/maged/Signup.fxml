@@ -42,7 +42,9 @@
 
         <!-- 🔽 جديد: مسار الصورة -->
         <TextField fx:id="imagePathField" maxWidth="300" promptText="Profile Image Path (.png)" />
-      <TextField fx:id="tb" layoutX="40.0" layoutY="147.0" maxWidth="300" promptText="TOTAL BALANCE " />
+
+        <TextField fx:id="tb" layoutX="40.0" layoutY="147.0" maxWidth="300" promptText="TOTAL BALANCE " />
+        <Label fx:id="tbError" textFill="red" />
 
         <Button fx:id="signupButton" disable="true" maxWidth="300" onAction="#handleSignup" style="-fx-background-color: #00ff88; -fx-text-fill: black; -fx-font-weight: bold; -fx-background-radius: 10;" text="Sign Up" />
 
