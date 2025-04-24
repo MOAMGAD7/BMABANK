@@ -52,6 +52,11 @@ class database_BankSystem {
                     "date TEXT DEFAULT CURRENT_TIMESTAMP," +
                     "FOREIGN KEY(user_id) REFERENCES users(id)" +
                     ");";
+            try {
+                stmt.executeUpdate("ALTER TABLE users ADD COLUMN profile_image TEXT;");
+            } catch (SQLException e) {
+                System.out.println("العمود profile_image موجود بالفعل.");
+            }
 
             stmt.execute(usersTable);
             stmt.execute(transactionsTable);
