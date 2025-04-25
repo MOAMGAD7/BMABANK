@@ -11,7 +11,6 @@ import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.stage.Stage;
-
 import java.io.IOException;
 
 import static java.lang.Double.parseDouble;
@@ -108,7 +107,6 @@ public class SignupController {
             valid = false;
         }
 
-        // ✅ Balance Validation
         try {
             double balance = Double.parseDouble(tb.getText());
             if (balance < 0) {
@@ -146,8 +144,20 @@ public class SignupController {
             );
 
             if (isRegistered) {
+                // تخزين username في UserSession
+                UserSession session = UserSession.getInstance();
+                session.setUsername(usernameField.getText());
                 showAlert("Success", "Registration successful!");
-                switchToLogin(event);
+
+                // الانتقال إلى صفحة الإعدادات
+                Parent root = FXMLLoader.load(getClass().getResource("/com/example/maged/Settings.fxml"));
+                Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
+                Scene scene = new Scene(root);
+                scene.getStylesheets().clear();
+                scene.getStylesheets().add(session.isDarkMode() ? "/com/example/maged/DarkMode.css" : "/com/example/maged/LightMode.css");
+                stage.setScene(scene);
+                stage.setTitle("Settings");
+                stage.show();
             } else {
                 showAlert("Error", "Registration failed. Username may be taken.");
             }
@@ -158,9 +168,15 @@ public class SignupController {
 
     @FXML
     protected void switchToLogin(ActionEvent event) throws IOException {
+        UserSession session = UserSession.getInstance();
         Parent root = FXMLLoader.load(getClass().getResource("/com/example/maged/login.fxml"));
         Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
-        stage.setScene(new Scene(root));
+        Scene scene = new Scene(root);
+        scene.getStylesheets().clear();
+        scene.getStylesheets().add(session.isDarkMode() ? "/com/example/maged/DarkMode.css" : "/com/example/maged/LightMode.css");
+        stage.setScene(scene);
+        stage.setTitle("Login");
+        stage.show();
     }
 
     private void showAlert(String title, String message) {

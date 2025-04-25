@@ -1,0 +1,31 @@
+/* Light Mode Styles */
+.root {
+    -fx-background-color: #ffffff; /* خلفية بيضاء */
+}
+.title {
+    -fx-font-size: 24px;
+    -fx-text-fill: #000000; /* نص أسود */
+    -fx-font-weight: bold;
+}
+.label {
+    -fx-text-fill: #333333; /* نص رمادي غامق */
+}
+.text-field {
+    -fx-background-color: #f0f0f0; /* خلفية فاتحة */
+    -fx-text-fill: #000000; /* نص أسود */
+    -fx-prompt-text-fill: #666666; /* نص placeholder رمادي */
+    -fx-border-color: #cccccc; /* حدود رمادية */
+    -fx-border-radius: 5;
+}
+.button {
+    -fx-background-color: #e0e0e0; /* خلفية رمادية فاتحة */
+    -fx-text-fill: #000000; /* نص أسود */
+    -fx-font-size: 14px;
+    -fx-background-radius: 5;
+}
+.button:hover {
+    -fx-background-color: #d0d0d0; /* خلفية أغمق عند التمرير */
+}
+.button:pressed {
+    -fx-background-color: #c0c0c0; /* خلفية أغمق عند الضغط */
+}

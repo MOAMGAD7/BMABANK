@@ -10,131 +10,257 @@ import java.util.Base64;
 
 class database_BankSystem {
     private static final String DB_URL = "jdbc:sqlite:bank.db";
+    private static final int SALT_LENGTH = 16;
+    private static final int ITERATIONS = 65536;
+    private static final int KEY_LENGTH = 128;
 
+    // نموذج بيانات لتخزين تفاصيل المستخدم
+    public static class UserDetails {
+        private String fullName;
+        private String email;
+        private String mobile;
+        private String nationalId;
+        private double totalBalance;
+        private String profileImage;
+
+        public UserDetails(String fullName, String email, String mobile, String nationalId, double totalBalance, String profileImage) {
+            this.fullName = fullName;
+            this.email = email;
+            this.mobile = mobile;
+            this.nationalId = nationalId;
+            this.totalBalance = totalBalance;
+            this.profileImage = profileImage;
+        }
+
+        // Getters
+        public String getFullName() { return fullName; }
+        public String getEmail() { return email; }
+        public String getMobile() { return mobile; }
+        public String getNationalId() { return nationalId; }
+        public double getTotalBalance() { return totalBalance; }
+        public String getProfileImage() { return profileImage; }
+    }
+
+    // إنشاء الجداول في قاعدة البيانات
     public static void createTables() {
         try (Connection conn = DriverManager.getConnection(DB_URL);
              Statement stmt = conn.createStatement()) {
 
-            // إنشاء جدول المستخدمين
-            String usersTable = "CREATE TABLE IF NOT EXISTS users (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                    "username TEXT UNIQUE NOT NULL," +
-                    "password TEXT NOT NULL," +
-                    "full_name TEXT," +
-                    "email TEXT," +
-                    "mobile TEXT," +
-                    "national_id TEXT," +
-                    "profile_image TEXT," +
-                    "total_balance REAL DEFAULT 0" +
-                    ");";
+            String usersTable = """
+                    CREATE TABLE IF NOT EXISTS users (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        username TEXT UNIQUE NOT NULL,
+                        password TEXT NOT NULL,
+                        salt TEXT NOT NULL,
+                        full_name TEXT,
+                        email TEXT,
+                        mobile TEXT,
+                        national_id TEXT,
+                        profile_image TEXT,
+                        total_balance REAL DEFAULT 0,
+                        last_login TEXT
+                    )
+                    """;
 
-            String transactionsTable = "CREATE TABLE IF NOT EXISTS transactions (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                    "user_id INTEGER," +
-                    "type TEXT," +
-                    "amount REAL," +
-                    "date TEXT DEFAULT CURRENT_TIMESTAMP," +
-                    "FOREIGN KEY(user_id) REFERENCES users(id)" +
-                    ");";
+            String transactionsTable = """
+                    CREATE TABLE IF NOT EXISTS transactions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER,
+                        type TEXT,
+                        amount REAL,
+                        date TEXT DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY(user_id) REFERENCES users(id)
+                    )
+                    """;
 
-            String transfersTable = "CREATE TABLE IF NOT EXISTS transfers (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                    "from_user TEXT NOT NULL," +
-                    "to_user TEXT NOT NULL," +
-                    "amount REAL NOT NULL," +
-                    "status TEXT DEFAULT 'pending'," +
-                    "date TEXT DEFAULT CURRENT_TIMESTAMP" +
-                    ");";
+            String transfersTable = """
+                    CREATE TABLE IF NOT EXISTS transfers (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        from_user TEXT NOT NULL,
+                        to_user TEXT NOT NULL,
+                        amount REAL NOT NULL,
+                        status TEXT DEFAULT 'pending',
+                        date TEXT DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """;
 
-            String investmentsTable = "CREATE TABLE IF NOT EXISTS investments (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                    "user_id INTEGER," +
-                    "type TEXT," +
-                    "amount REAL," +
-                    "date TEXT DEFAULT CURRENT_TIMESTAMP," +
-                    "FOREIGN KEY(user_id) REFERENCES users(id)" +
-                    ");";
-
-            // لو العمودين دول اتضافوا قبل كده، تجاهل الخطأ
-            try {
-                stmt.executeUpdate("ALTER TABLE users ADD COLUMN profile_image TEXT;");
-            } catch (SQLException e) {
-                System.out.println("العمود profile_image موجود بالفعل.");
-            }
-
-            try {
-                stmt.executeUpdate("ALTER TABLE users ADD COLUMN total_balance REAL DEFAULT 0;");
-            } catch (SQLException e) {
-                System.out.println("العمود total_balance موجود بالفعل.");
-            }
+            String investmentsTable = """
+                    CREATE TABLE IF NOT EXISTS investments (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER,
+                        type TEXT,
+                        amount REAL,
+                        date TEXT DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY(user_id) REFERENCES users(id)
+                    )
+                    """;
 
             stmt.execute(usersTable);
             stmt.execute(transactionsTable);
             stmt.execute(transfersTable);
             stmt.execute(investmentsTable);
 
+            // التحقق من وجود الأعمدة وإضافتها إذا لم تكن موجودة
+            addColumnIfNotExists(conn, "users", "profile_image", "TEXT");
+            addColumnIfNotExists(conn, "users", "total_balance", "REAL DEFAULT 0");
+            addColumnIfNotExists(conn, "users", "salt", "TEXT");
+            addColumnIfNotExists(conn, "users", "last_login", "TEXT");
+
         } catch (SQLException e) {
+            System.out.println("Error creating tables: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
+    // دالة مساعدة لإضافة عمود إذا لم يكن موجودًا
+    private static void addColumnIfNotExists(Connection conn, String tableName, String columnName, String columnType) {
+        try {
+            DatabaseMetaData meta = conn.getMetaData();
+            ResultSet rs = meta.getColumns(null, null, tableName, columnName);
+            if (!rs.next()) { // العمود غير موجود
+                try (Statement stmt = conn.createStatement()) {
+                    String alterQuery = String.format("ALTER TABLE %s ADD COLUMN %s %s;", tableName, columnName, columnType);
+                    stmt.executeUpdate(alterQuery);
+                    System.out.println("Added column " + columnName + " to table " + tableName);
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Error adding column " + columnName + ": " + e.getMessage());
+        }
+    }
+
+    // دالة تسجيل مستخدم جديد
     public static boolean registerUser(String username, String password, String name, String email,
                                        String mobile, String nationalId, String imagePath, double initialBalance) {
-        try {
-            String hashedPassword = hashPassword(password);
+        if (username == null || username.trim().isEmpty() || password == null || password.trim().isEmpty()) {
+            System.out.println("Username and password cannot be empty.");
+            return false;
+        }
+        if (initialBalance < 0) {
+            System.out.println("Initial balance cannot be negative.");
+            return false;
+        }
 
-            Connection conn = DriverManager.getConnection(DB_URL);
-            String sql = "INSERT INTO users (username, password, full_name, email, mobile, national_id, profile_image, total_balance) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-            PreparedStatement pstmt = conn.prepareStatement(sql);
+        byte[] salt = generateSalt();
+        String hashedPassword = hashPassword(password, salt);
+        String saltBase64 = Base64.getEncoder().encodeToString(salt);
+
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(
+                     "INSERT INTO users (username, password, salt, full_name, email, mobile, national_id, profile_image, total_balance) " +
+                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
             pstmt.setString(1, username);
             pstmt.setString(2, hashedPassword);
-            pstmt.setString(3, name);
-            pstmt.setString(4, email);
-            pstmt.setString(5, mobile);
-            pstmt.setString(6, nationalId);
-            pstmt.setString(7, imagePath);
-            pstmt.setDouble(8, initialBalance); // القيمة الابتدائية اللي المستخدم يحددها
+            pstmt.setString(3, saltBase64);
+            pstmt.setString(4, name);
+            pstmt.setString(5, email);
+            pstmt.setString(6, mobile);
+            pstmt.setString(7, nationalId);
+            pstmt.setString(8, imagePath);
+            pstmt.setDouble(9, initialBalance);
 
             pstmt.executeUpdate();
-
-            pstmt.close();
-            conn.close();
             return true;
         } catch (SQLException e) {
+            System.out.println("Error registering user: " + e.getMessage());
             e.printStackTrace();
             return false;
         }
     }
 
-
+    // دالة لتسجيل الدخول
     public static boolean loginUser(String username, String password) {
-        String sql = "SELECT password FROM users WHERE username = ?";
+        String sql = "SELECT password, salt FROM users WHERE username = ?";
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
-
             pstmt.setString(1, username);
-            ResultSet rs = pstmt.executeQuery();
-
-            if (rs.next()) {
-                String storedHash = rs.getString("password");
-                return storedHash.equals(hashPassword(password));
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    String storedHash = rs.getString("password");
+                    String saltBase64 = rs.getString("salt");
+                    if (saltBase64 == null) {
+                        return false;
+                    }
+                    byte[] salt = Base64.getDecoder().decode(saltBase64);
+                    String hashedInputPassword = hashPassword(password, salt);
+                    return storedHash.equals(hashedInputPassword);
+                }
             }
         } catch (SQLException e) {
+            System.out.println("Error logging in: " + e.getMessage());
             e.printStackTrace();
         }
         return false;
     }
 
-    private static String hashPassword(String password) {
+    // دالة لإنشاء salt عشوائي
+    private static byte[] generateSalt() {
+        SecureRandom random = new SecureRandom();
+        byte[] salt = new byte[SALT_LENGTH];
+        random.nextBytes(salt);
+        return salt;
+    }
+
+    // دالة لتشفير كلمة المرور باستخدام PBKDF2 مع salt
+    private static String hashPassword(String password, byte[] salt) {
         try {
-            PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), new byte[16], 65536, 128);
+            PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, ITERATIONS, KEY_LENGTH);
             SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
             byte[] hash = skf.generateSecret(spec).getEncoded();
             return Base64.getEncoder().encodeToString(hash);
         } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Error hashing password: " + e.getMessage(), e);
         }
+    }
+
+    // دالة لاسترجاع بيانات المستخدم بناءً على username
+    public static UserDetails getUserDetails(String username) {
+        String sql = "SELECT full_name, email, mobile, national_id, total_balance, profile_image FROM users WHERE username = ?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, username);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return new UserDetails(
+                            rs.getString("full_name"),
+                            rs.getString("email"),
+                            rs.getString("mobile"),
+                            rs.getString("national_id"),
+                            rs.getDouble("total_balance"),
+                            rs.getString("profile_image")
+                    );
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Error retrieving user details: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    // دالة لاسترجاع بيانات المستخدم بناءً على id
+    public static UserDetails getUserDetailsById(int userId) {
+        String sql = "SELECT full_name, email, mobile, national_id, total_balance, profile_image FROM users WHERE id = ?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, userId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return new UserDetails(
+                            rs.getString("full_name"),
+                            rs.getString("email"),
+                            rs.getString("mobile"),
+                            rs.getString("national_id"),
+                            rs.getDouble("total_balance"),
+                            rs.getString("profile_image")
+                    );
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Error retrieving user details by ID: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return null;
     }
 
     // دالة استعلام الرصيد
@@ -143,11 +269,13 @@ class database_BankSystem {
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, username);
-            ResultSet rs = pstmt.executeQuery();
-            if (rs.next()) {
-                return rs.getDouble("total_balance");
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getDouble("total_balance");
+                }
             }
         } catch (SQLException e) {
+            System.out.println("Error retrieving balance: " + e.getMessage());
             e.printStackTrace();
         }
         return -1;
@@ -155,17 +283,45 @@ class database_BankSystem {
 
     // دالة الإيداع
     public static boolean deposit(String username, double amount) {
-        if (amount <= 0) return false;
+        if (amount <= 0) {
+            System.out.println("Deposit amount must be positive.");
+            return false;
+        }
+        if (!userExists(username)) {
+            System.out.println("User does not exist: " + username);
+            return false;
+        }
         double current = getBalance(username);
-        return updateBalance(username, current + amount);
+        if (current < 0) return false;
+        boolean balanceUpdated = updateBalance(username, current + amount);
+        if (balanceUpdated) {
+            int userId = getUserId(username);
+            return recordTransaction(userId, "deposit", amount);
+        }
+        return false;
     }
 
     // دالة السحب
     public static boolean withdraw(String username, double amount) {
-        if (amount <= 0) return false;
+        if (amount <= 0) {
+            System.out.println("Withdrawal amount must be positive.");
+            return false;
+        }
+        if (!userExists(username)) {
+            System.out.println("User does not exist: " + username);
+            return false;
+        }
         double current = getBalance(username);
-        if (current < amount) return false;
-        return updateBalance(username, current - amount);
+        if (current < 0 || current < amount) {
+            System.out.println("Insufficient funds or user not found.");
+            return false;
+        }
+        boolean balanceUpdated = updateBalance(username, current - amount);
+        if (balanceUpdated) {
+            int userId = getUserId(username);
+            return recordTransaction(userId, "withdraw", amount);
+        }
+        return false;
     }
 
     // دالة تحديث الرصيد
@@ -173,131 +329,164 @@ class database_BankSystem {
         String sql = "UPDATE users SET total_balance = ? WHERE username = ?";
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
-
             pstmt.setDouble(1, newBalance);
             pstmt.setString(2, username);
-            pstmt.executeUpdate();
-            return true;
+            int rowsUpdated = pstmt.executeUpdate();
+            return rowsUpdated > 0;
         } catch (SQLException e) {
+            System.out.println("Error updating balance: " + e.getMessage());
             e.printStackTrace();
             return false;
         }
     }
-    public static String getFullName(String username) {
-        String sql = "SELECT full_name FROM users WHERE username = ?";
+
+    // دالة للتحقق من وجود المستخدم
+    public static boolean userExists(String username) {
+        String sql = "SELECT 1 FROM users WHERE username = ?";
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, username);
-            ResultSet rs = pstmt.executeQuery();
-            if (rs.next()) {
-                return rs.getString("full_name");
+            try (ResultSet rs = pstmt.executeQuery()) {
+                return rs.next();
             }
         } catch (SQLException e) {
+            System.out.println("Error checking user existence: " + e.getMessage());
             e.printStackTrace();
+            return false;
         }
-        return null;
     }
 
-    // دالة للحصول على البريد الإلكتروني بناءً على اسم المستخدم
-    public static String getEmail(String username) {
-        String sql = "SELECT email FROM users WHERE username = ?";
+    // دالة للحصول على معرف المستخدم
+    private static int getUserId(String username) {
+        String sql = "SELECT id FROM users WHERE username = ?";
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, username);
-            ResultSet rs = pstmt.executeQuery();
-            if (rs.next()) {
-                return rs.getString("email");
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt("id");
+                }
             }
         } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-    // دالة للحصول على رقم الهاتف بناءً على اسم المستخدم
-    public static String getMobile(String username) {
-        String sql = "SELECT mobile FROM users WHERE username = ?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, username);
-            ResultSet rs = pstmt.executeQuery();
-            if (rs.next()) {
-                return rs.getString("mobile");
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-    // دالة للحصول على رقم الهوية الوطنية بناءً على اسم المستخدم
-    public static String getNationalId(String username) {
-        String sql = "SELECT national_id FROM users WHERE username = ?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, username);
-            ResultSet rs = pstmt.executeQuery();
-            if (rs.next()) {
-                return rs.getString("national_id");
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-    // دالة للحصول على مسار صورة الملف الشخصي بناءً على اسم المستخدم
-    public static String getProfileImage(String username) {
-        String sql = "SELECT profile_image FROM users WHERE username = ?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, username);
-            ResultSet rs = pstmt.executeQuery();
-            if (rs.next()) {
-                return rs.getString("profile_image");
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-    // دالة للحصول على الرصيد الإجمالي بناءً على اسم المستخدم
-    public static double getTotalBalance(String username) {
-        String sql = "SELECT total_balance FROM users WHERE username = ?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, username);
-            ResultSet rs = pstmt.executeQuery();
-            if (rs.next()) {
-                return rs.getDouble("total_balance");
-            }
-        } catch (SQLException e) {
+            System.out.println("Error retrieving user ID: " + e.getMessage());
             e.printStackTrace();
         }
         return -1;
-    }    public static boolean transfer(String fromUsername, String toUsername, double amount) {
-        // التأكد من أن المبلغ أكبر من صفر
-        if (amount <= 0) {
-            return false; // المبلغ غير صالح
+    }
+
+    // دالة لتحديث بيانات المستخدم
+    public static boolean updateUserDetails(String username, String fullName, String email, String mobile, String profileImagePath) {
+        if (!userExists(username)) {
+            System.out.println("User does not exist: " + username);
+            return false;
+        }
+        String sql = "UPDATE users SET full_name = ?, email = ?, mobile = ?, profile_image = ? WHERE username = ?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, fullName);
+            pstmt.setString(2, email);
+            pstmt.setString(3, mobile);
+            pstmt.setString(4, profileImagePath);
+            pstmt.setString(5, username);
+            int rowsUpdated = pstmt.executeUpdate();
+            return rowsUpdated > 0;
+        } catch (SQLException e) {
+            System.out.println("Error updating user details: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    // دالة لتسجيل المعاملات
+    public static boolean recordTransaction(int userId, String type, double amount) {
+        String sql = "INSERT INTO transactions (user_id, type, amount) VALUES (?, ?, ?)";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, userId);
+            pstmt.setString(2, type);
+            pstmt.setDouble(3, amount);
+            pstmt.executeUpdate();
+            return true;
+        } catch (SQLException e) {
+            System.out.println("Error recording transaction: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    // دالة لتسجيل التحويلات
+    public static boolean recordTransfer(String fromUsername, String toUsername, double amount, String status) {
+        if (!userExists(fromUsername) || !userExists(toUsername)) {
+            System.out.println("One or both users do not exist.");
+            return false;
+        }
+        String sql = "INSERT INTO transfers (from_user, to_user, amount, status) VALUES (?, ?, ?, ?)";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, fromUsername);
+            pstmt.setString(2, toUsername);
+            pstmt.setDouble(3, amount);
+            pstmt.setString(4, status);
+            pstmt.executeUpdate();
+            return true;
+        } catch (SQLException e) {
+            System.out.println("Error recording transfer: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    // دالة لتحديث تاريخ آخر دخول
+    public static boolean updateLastLogin(String username) {
+        if (!userExists(username)) {
+            System.out.println("User does not exist: " + username);
+            return false;
         }
 
-        // الحصول على الرصيد الحالي للمستخدم الذي سيتم التحويل منه
-        double fromBalance = getBalance(fromUsername);
-
-        // التأكد أن الحساب الذي سيتم التحويل منه يحتوي على رصيد كافي
-        if (fromBalance < amount) {
-            return false; // ليس هناك رصيد كافي في الحساب
+        // التحقق من وجود العمود last_login
+        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+            addColumnIfNotExists(conn, "users", "last_login", "TEXT");
+        } catch (SQLException e) {
+            System.out.println("Error ensuring last_login column exists: " + e.getMessage());
+            return false;
         }
 
-        // الحصول على الرصيد الحالي للمستخدم الذي سيتم التحويل إليه (اختياري: يمكن استخدامه لتحديث أو التحقق)
-        double toBalance = getBalance(toUsername);
+        String sql = "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE username = ?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, username);
+            int rowsUpdated = pstmt.executeUpdate();
+            return rowsUpdated > 0;
+        } catch (SQLException e) {
+            System.out.println("Error updating last login: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
 
-        // تحديث الرصيد في الحسابين
-        boolean updateFromSuccess = updateBalance(fromUsername, fromBalance - amount);
-        boolean updateToSuccess = updateBalance(toUsername, toBalance + amount);
+    // دالة للحصول على تاريخ آخر دخول
+    public static String getLastLogin(String username) {
+        // التحقق من وجود العمود last_login
+        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+            addColumnIfNotExists(conn, "users", "last_login", "TEXT");
+        } catch (SQLException e) {
+            System.out.println("Error ensuring last_login column exists: " + e.getMessage());
+            return null;
+        }
 
-        // التأكد من نجاح التحديث في الحسابين
-        return updateFromSuccess && updateToSuccess;
+        String sql = "SELECT last_login FROM users WHERE username = ?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, username);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("last_login");
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Error retrieving last login: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return null;
     }
 }
