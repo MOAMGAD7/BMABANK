@@ -12,6 +12,9 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.stage.Stage;
 import java.io.IOException;
+import jakarta.mail.*;
+import jakarta.mail.internet.*;
+import java.util.Properties;
 
 import static java.lang.Double.parseDouble;
 
@@ -147,7 +150,11 @@ public class SignupController {
                 // تخزين username في UserSession
                 UserSession session = UserSession.getInstance();
                 session.setUsername(usernameField.getText());
-                showAlert("Success", "Registration successful!");
+
+                // إرسال بريد إلكتروني تحقق
+                sendVerificationEmail(emailField.getText(), usernameField.getText());
+
+                showAlert("Success", "Registration successful! A verification email has been sent to your email address.");
 
                 // الانتقال إلى صفحة الإعدادات
                 Parent root = FXMLLoader.load(getClass().getResource("/com/example/maged/Settings.fxml"));
@@ -163,6 +170,49 @@ public class SignupController {
             }
         } catch (Exception e) {
             showAlert("Error", "An error occurred: " + e.getMessage());
+        }
+    }
+
+    private void sendVerificationEmail(String toEmail, String username) {
+        // إعدادات SMTP لـ Gmail
+        String host = "smtp.gmail.com";
+        String port = "587";
+        String mailFrom = "mohamedamgad7777@gmail.com"; // استبدل هذا بعنوان بريدك الإلكتروني
+        String password = "xnpvkxlplwtqscbg";   // استبدل هذا بكلمة المرور التي حصلت عليها من App Password
+
+        // إعداد خصائص البريد
+        Properties properties = new Properties();
+        properties.put("mail.smtp.auth", "true");
+        properties.put("mail.smtp.starttls.enable", "true");
+        properties.put("mail.smtp.host", host);
+        properties.put("mail.smtp.port", port);
+
+        // إنشاء جلسة بريد
+        Session session = Session.getInstance(properties, new Authenticator() {
+            @Override
+            protected PasswordAuthentication getPasswordAuthentication() {
+                return new PasswordAuthentication(mailFrom, password);
+            }
+        });
+
+        try {
+            // إنشاء رسالة بريد إلكتروني
+            MimeMessage message = new MimeMessage(session);
+            message.setFrom(new InternetAddress(mailFrom));
+            message.addRecipient(Message.RecipientType.TO, new InternetAddress(toEmail));
+            message.setSubject("Welcome to BMA Bank - Account Verification");
+            message.setText("Dear " + username + ",\n\n" +
+                    "Thank you for registering with BMA Bank!\n" +
+                    "Your account has been successfully created.\n\n" +
+                    "Best regards,\n" +
+                    "BMA Bank Team");
+
+            // إرسال الرسالة
+            Transport.send(message);
+            System.out.println("Verification email sent successfully to " + toEmail);
+        } catch (MessagingException e) {
+            System.out.println("Failed to send verification email: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
