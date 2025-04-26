@@ -26,11 +26,19 @@ public class VerifyEmailController {
         UserSession session = UserSession.getInstance();
         String username = session.getUsername();
 
+        // التحقق إن الـ session لسه موجودة
+        if (username == null || username.isEmpty()) {
+            codeError.setText("Session expired. Please try again.");
+            return;
+        }
+
+        // التحقق إن الكود مش فاضي
         if (enteredCode.isEmpty()) {
             codeError.setText("Please enter the verification code");
             return;
         }
 
+        // التحقق إن الكود 6 أرقام
         if (!enteredCode.matches("\\d{6}")) {
             codeError.setText("Verification code must be 6 digits");
             return;
@@ -39,7 +47,7 @@ public class VerifyEmailController {
         // التحقق من الكود باستخدام database_BankSystem
         if (database_BankSystem.verifyCode(username, enteredCode)) {
             // إرسال إيميل تأكيد التحقق
-            String userEmail = getUserEmail(username); // جلب الإيميل من قاعدة البيانات
+            String userEmail = getUserEmail(username);
             if (userEmail != null) {
                 boolean emailSent = sendVerificationSuccessEmail(userEmail, username);
                 if (emailSent) {
@@ -54,21 +62,45 @@ public class VerifyEmailController {
             // عرض رسالة نجاح
             showAlert("Success", "Email verified successfully!");
 
-            // الانتقال إلى صفحة تسجيل الدخول
-            Parent root = FXMLLoader.load(getClass().getResource("/com/example/maged/login.fxml"));
-            Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
-            Scene scene = new Scene(root);
-            scene.getStylesheets().clear();
-            scene.getStylesheets().add(session.isDarkMode() ? "/com/example/maged/DarkMode.css" : "/com/example/maged/LightMode.css");
-            stage.setScene(scene);
-            stage.setTitle("Login");
-            stage.show();
+            // التحقق من مصدر الطلب (Forget Password أو Sign Up)
+            if (session.isPasswordReset()) {
+                // الحالة: المستخدم جاي من Forget Password
+                // الانتقال إلى صفحة تغيير كلمة المرور
+                FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/example/maged/ChangePassword.fxml"));
+                Parent root = loader.load();
+                ChangePasswordController controller = loader.getController();
+                controller.setUsername(username); // تمرير الـ username لصفحة تغيير كلمة المرور
+
+                Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
+                Scene scene = new Scene(root);
+                scene.getStylesheets().clear();
+                scene.getStylesheets().add(session.isDarkMode() ? "/com/example/maged/DarkMode.css" : "/com/example/maged/LightMode.css");
+                stage.setScene(scene);
+                stage.setTitle("Change Password");
+                stage.show();
+
+                // تنظيف حالة password reset من الـ session
+                session.setPasswordReset(false);
+            } else {
+                // الحالة: المستخدم جاي من Sign Up
+                // الانتقال إلى صفحة تسجيل الدخول
+                Parent root = FXMLLoader.load(getClass().getResource("/com/example/maged/login.fxml"));
+                Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
+                Scene scene = new Scene(root);
+                scene.getStylesheets().clear();
+                scene.getStylesheets().add(session.isDarkMode() ? "/com/example/maged/DarkMode.css" : "/com/example/maged/LightMode.css");
+                stage.setScene(scene);
+                stage.setTitle("Login");
+                stage.show();
+
+                // تنظيف الـ session بالكامل بعد التحقق الناجح
+                session.clear();
+            }
         } else {
             codeError.setText("Invalid or expired verification code");
         }
     }
 
-    // دالة لجلب الإيميل من قاعدة البيانات
     private String getUserEmail(String username) {
         database_BankSystem.UserDetails userDetails = database_BankSystem.getUserDetails(username);
         if (userDetails != null) {
@@ -77,15 +109,17 @@ public class VerifyEmailController {
         return null;
     }
 
-    // دالة لإرسال إيميل تأكيد التحقق
     private boolean sendVerificationSuccessEmail(String toEmail, String username) {
-        // إعدادات SMTP لـ Gmail
+        if (toEmail == null || toEmail.trim().isEmpty()) {
+            System.out.println("❌ Email address is null or empty. Cannot send verification email.");
+            return false;
+        }
+
         String host = "smtp.gmail.com";
         String port = "587";
         String mailFrom = "mohamedamgad7777@gmail.com";
         String password = "xnpvkxlplwtqscbg";
 
-        // إعداد خصائص البريد
         Properties properties = new Properties();
         properties.put("mail.smtp.auth", "true");
         properties.put("mail.smtp.starttls.enable", "true");
@@ -93,7 +127,6 @@ public class VerifyEmailController {
         properties.put("mail.smtp.port", port);
         properties.put("mail.debug", "true");
 
-        // إنشاء جلسة بريد
         Session session = Session.getInstance(properties, new Authenticator() {
             @Override
             protected PasswordAuthentication getPasswordAuthentication() {
@@ -102,13 +135,11 @@ public class VerifyEmailController {
         });
 
         try {
-            // إنشاء رسالة بريد إلكتروني
             MimeMessage message = new MimeMessage(session);
             message.setFrom(new InternetAddress(mailFrom));
             message.addRecipient(Message.RecipientType.TO, new InternetAddress(toEmail));
             message.setSubject("BMA Bank - Email Verification Successful");
 
-            // إعداد محتوى الرسالة بتنسيق HTML
             String htmlContent = """
                 <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px; background-color: #f9f9f9;'>
                     <h2 style='color: #2c3e50; text-align: center;'>Email Verification Successful!</h2>
@@ -131,7 +162,6 @@ public class VerifyEmailController {
                 """.formatted(username);
             message.setContent(htmlContent, "text/html; charset=utf-8");
 
-            // إرسال الرسالة
             Transport.send(message);
             return true;
         } catch (MessagingException e) {

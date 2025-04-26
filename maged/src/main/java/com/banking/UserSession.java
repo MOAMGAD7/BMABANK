@@ -3,8 +3,8 @@ package com.banking;
 public class UserSession {
     private static UserSession instance;
     private String username;
-    private boolean isDarkMode = true; // افتراضيًا الدارك مود مفعل
-    private String verificationCode; // متغير لتخزين رمز التحقق
+    private boolean darkMode = false;
+    private boolean passwordReset = false;
 
     private UserSession() {}
 
@@ -24,23 +24,23 @@ public class UserSession {
     }
 
     public boolean isDarkMode() {
-        return isDarkMode;
+        return darkMode;
     }
 
     public void setDarkMode(boolean darkMode) {
-        this.isDarkMode = darkMode;
+        this.darkMode = darkMode;
     }
 
-    public String getVerificationCode() {
-        return verificationCode;
+    public boolean isPasswordReset() {
+        return passwordReset;
     }
 
-    public void setVerificationCode(String verificationCode) {
-        this.verificationCode = verificationCode;
+    public void setPasswordReset(boolean passwordReset) {
+        this.passwordReset = passwordReset;
     }
 
     public void clear() {
         username = null;
-        verificationCode = null; // مسح رمز التحقق عند مسح الجلسة
+        passwordReset = false;
     }
 }

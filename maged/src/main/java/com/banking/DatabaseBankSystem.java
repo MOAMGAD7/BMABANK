@@ -175,7 +175,70 @@ class database_BankSystem {
         }
     }
 
-    // دالة لتوليد وتخزين كود التحقق مع سجلات إضافية
+    public static String getUsernameByEmail(String email) {
+        if (email == null || email.trim().isEmpty()) {
+            System.out.println("❌ Cannot retrieve username: Email is null or empty.");
+            return null;
+        }
+
+        String sql = "SELECT username FROM users WHERE email = ?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, email);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    String username = rs.getString("username");
+                    System.out.println("✅ Retrieved username for email " + email + ": " + username);
+                    return username;
+                } else {
+                    System.out.println("❌ No user found with email: " + email);
+                    return null;
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("❌ Error retrieving username by email: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public static boolean updatePassword(String username, String newPassword) {
+        if (username == null || username.trim().isEmpty() || newPassword == null || newPassword.trim().isEmpty()) {
+            System.out.println("❌ Cannot update password: Username or new password is null or empty.");
+            return false;
+        }
+
+        if (!userExists(username)) {
+            System.out.println("❌ User does not exist: " + username);
+            return false;
+        }
+
+        // توليد salt جديد وتشفير كلمة المرور الجديدة
+        byte[] salt = generateSalt();
+        String hashedPassword = hashPassword(newPassword, salt);
+        String saltBase64 = Base64.getEncoder().encodeToString(salt);
+
+        String sql = "UPDATE users SET password = ?, salt = ? WHERE username = ?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, hashedPassword);
+            pstmt.setString(2, saltBase64);
+            pstmt.setString(3, username);
+            int rowsAffected = pstmt.executeUpdate();
+            if (rowsAffected > 0) {
+                System.out.println("✅ Password updated successfully for user: " + username);
+                return true;
+            } else {
+                System.out.println("❌ Failed to update password: No rows affected for user " + username);
+                return false;
+            }
+        } catch (SQLException e) {
+            System.out.println("❌ Error updating password: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
     public static String generateAndSaveVerificationCode(String username) {
         if (username == null || username.trim().isEmpty()) {
             System.out.println("❌ Cannot generate verification code: Username is null or empty.");
