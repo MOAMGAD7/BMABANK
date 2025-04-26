@@ -13,8 +13,8 @@ class database_BankSystem {
     private static final int SALT_LENGTH = 16;
     private static final int ITERATIONS = 65536;
     private static final int KEY_LENGTH = 128;
+    private static final int CODE_LENGTH = 6;
 
-    // نموذج بيانات لتخزين تفاصيل المستخدم
     public static class UserDetails {
         private String fullName;
         private String email;
@@ -32,7 +32,6 @@ class database_BankSystem {
             this.profileImage = profileImage;
         }
 
-        // Getters
         public String getFullName() { return fullName; }
         public String getEmail() { return email; }
         public String getMobile() { return mobile; }
@@ -41,7 +40,6 @@ class database_BankSystem {
         public String getProfileImage() { return profileImage; }
     }
 
-    // إنشاء الجداول في قاعدة البيانات
     public static void createTables() {
         try (Connection conn = DriverManager.getConnection(DB_URL);
              Statement stmt = conn.createStatement()) {
@@ -58,7 +56,15 @@ class database_BankSystem {
                         national_id TEXT,
                         profile_image TEXT,
                         total_balance REAL DEFAULT 0,
-                        last_login TEXT
+                        last_login TEXT,
+                        is_verified BOOLEAN NOT NULL DEFAULT 0
+                    )
+                    """;
+
+            String verificationCodesTable = """
+                    CREATE TABLE IF NOT EXISTS verification_codes (
+                        username TEXT PRIMARY KEY,
+                        code TEXT NOT NULL
                     )
                     """;
 
@@ -96,15 +102,16 @@ class database_BankSystem {
                     """;
 
             stmt.execute(usersTable);
+            stmt.execute(verificationCodesTable);
             stmt.execute(transactionsTable);
             stmt.execute(transfersTable);
             stmt.execute(investmentsTable);
 
-            // التحقق من وجود الأعمدة وإضافتها إذا لم تكن موجودة
             addColumnIfNotExists(conn, "users", "profile_image", "TEXT");
             addColumnIfNotExists(conn, "users", "total_balance", "REAL DEFAULT 0");
             addColumnIfNotExists(conn, "users", "salt", "TEXT");
             addColumnIfNotExists(conn, "users", "last_login", "TEXT");
+            addColumnIfNotExists(conn, "users", "is_verified", "BOOLEAN NOT NULL DEFAULT 0");
 
         } catch (SQLException e) {
             System.out.println("Error creating tables: " + e.getMessage());
@@ -112,12 +119,11 @@ class database_BankSystem {
         }
     }
 
-    // دالة مساعدة لإضافة عمود إذا لم يكن موجودًا
     private static void addColumnIfNotExists(Connection conn, String tableName, String columnName, String columnType) {
         try {
             DatabaseMetaData meta = conn.getMetaData();
             ResultSet rs = meta.getColumns(null, null, tableName, columnName);
-            if (!rs.next()) { // العمود غير موجود
+            if (!rs.next()) {
                 try (Statement stmt = conn.createStatement()) {
                     String alterQuery = String.format("ALTER TABLE %s ADD COLUMN %s %s;", tableName, columnName, columnType);
                     stmt.executeUpdate(alterQuery);
@@ -129,7 +135,6 @@ class database_BankSystem {
         }
     }
 
-    // دالة تسجيل مستخدم جديد
     public static boolean registerUser(String username, String password, String name, String email,
                                        String mobile, String nationalId, String imagePath, double initialBalance) {
         if (username == null || username.trim().isEmpty() || password == null || password.trim().isEmpty()) {
@@ -147,8 +152,8 @@ class database_BankSystem {
 
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement pstmt = conn.prepareStatement(
-                     "INSERT INTO users (username, password, salt, full_name, email, mobile, national_id, profile_image, total_balance) " +
-                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
+                     "INSERT INTO users (username, password, salt, full_name, email, mobile, national_id, profile_image, total_balance, is_verified) " +
+                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
             pstmt.setString(1, username);
             pstmt.setString(2, hashedPassword);
             pstmt.setString(3, saltBase64);
@@ -158,8 +163,10 @@ class database_BankSystem {
             pstmt.setString(7, nationalId);
             pstmt.setString(8, imagePath);
             pstmt.setDouble(9, initialBalance);
+            pstmt.setBoolean(10, false);
 
-            pstmt.executeUpdate();
+            int rowsAffected = pstmt.executeUpdate();
+            System.out.println("User " + username + " registered successfully. Rows affected: " + rowsAffected);
             return true;
         } catch (SQLException e) {
             System.out.println("Error registering user: " + e.getMessage());
@@ -168,14 +175,157 @@ class database_BankSystem {
         }
     }
 
-    // دالة لتسجيل الدخول
-    public static boolean loginUser(String username, String password) {
-        String sql = "SELECT password, salt FROM users WHERE username = ?";
+    // دالة لتوليد وتخزين كود التحقق مع سجلات إضافية
+    public static String generateAndSaveVerificationCode(String username) {
+        if (username == null || username.trim().isEmpty()) {
+            System.out.println("❌ Cannot generate verification code: Username is null or empty.");
+            return null;
+        }
+
+        if (!userExists(username)) {
+            System.out.println("❌ Cannot generate verification code: User " + username + " does not exist in the database.");
+            return null;
+        }
+
+        SecureRandom random = new SecureRandom();
+        String code = String.valueOf(random.nextInt(999999 - 100000 + 1) + 100000);
+        System.out.println("✅ Generated verification code for " + username + ": " + code);
+
+        String sql = "INSERT OR REPLACE INTO verification_codes (username, code) VALUES (?, ?)";
+        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                pstmt.setString(1, username);
+                pstmt.setString(2, code);
+                int rowsAffected = pstmt.executeUpdate();
+                System.out.println("Rows affected in verification_codes: " + rowsAffected);
+
+                if (rowsAffected == 0) {
+                    System.out.println("❌ Failed to insert verification code for " + username + " into verification_codes table.");
+                    conn.rollback();
+                    return null;
+                }
+
+                conn.commit();
+                System.out.println("✅ Changes committed for verification code insertion for " + username);
+
+                // تحقق فوري باستخدام نفس الاتصال
+                String verifySql = "SELECT code FROM verification_codes WHERE username = ?";
+                try (PreparedStatement verifyStmt = conn.prepareStatement(verifySql)) {
+                    verifyStmt.setString(1, username);
+                    try (ResultSet rs = verifyStmt.executeQuery()) {
+                        if (rs.next()) {
+                            String storedCode = rs.getString("code");
+                            System.out.println("✅ Immediate verification - Stored code for " + username + ": " + storedCode);
+                            return code;
+                        } else {
+                            System.out.println("❌ Immediate verification failed: No code found in database for " + username + " after insertion.");
+                            conn.rollback();
+                            return null;
+                        }
+                    }
+                }
+            } catch (SQLException e) {
+                System.out.println("❌ Error during verification code insertion or immediate verification: " + e.getMessage());
+                e.printStackTrace();
+                conn.rollback();
+                return null;
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException e) {
+            System.out.println("❌ Error managing database connection for insertion: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public static String getVerificationCode(String username) {
+        String sql = "SELECT code FROM verification_codes WHERE username = ?";
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, username);
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
+                    String code = rs.getString("code");
+                    System.out.println("✅ Retrieved verification code for " + username + ": " + code);
+                    return code;
+                } else {
+                    System.out.println("❌ No verification code found for " + username);
+                    return null;
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("❌ Error retrieving verification code: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public static boolean verifyCode(String username, String code) {
+        String storedCode = getVerificationCode(username);
+        if (storedCode == null) {
+            System.out.println("❌ No verification code found for " + username);
+            return false;
+        }
+
+        if (storedCode.equals(code)) {
+            try (Connection conn = DriverManager.getConnection(DB_URL)) {
+                String updateSql = "UPDATE users SET is_verified = 1 WHERE username = ?";
+                try (PreparedStatement updatePstmt = conn.prepareStatement(updateSql)) {
+                    updatePstmt.setString(1, username);
+                    updatePstmt.executeUpdate();
+                }
+
+                String deleteSql = "DELETE FROM verification_codes WHERE username = ?";
+                try (PreparedStatement deletePstmt = conn.prepareStatement(deleteSql)) {
+                    deletePstmt.setString(1, username);
+                    deletePstmt.executeUpdate();
+                }
+            } catch (SQLException e) {
+                System.out.println("❌ Error during verification process: " + e.getMessage());
+                e.printStackTrace();
+                return false;
+            }
+
+            System.out.println("✅ Verification successful for " + username);
+            return true;
+        } else {
+            System.out.println("❌ Verification code mismatch for " + username + ". Entered: " + code + ", Stored: " + storedCode);
+            return false;
+        }
+    }
+
+    public static boolean isUserVerified(String username) {
+        String sql = "SELECT is_verified FROM users WHERE username = ?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, username);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getBoolean("is_verified");
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("❌ Error checking verification status: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    public static boolean loginUser(String username, String password) {
+        String sql = "SELECT password, salt, is_verified FROM users WHERE username = ?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, username);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    boolean isVerified = rs.getBoolean("is_verified");
+                    if (!isVerified) {
+                        System.out.println("User " + username + " has not verified their email.");
+                        return false;
+                    }
+
                     String storedHash = rs.getString("password");
                     String saltBase64 = rs.getString("salt");
                     if (saltBase64 == null) {
@@ -187,13 +337,12 @@ class database_BankSystem {
                 }
             }
         } catch (SQLException e) {
-            System.out.println("Error logging in: " + e.getMessage());
+            System.out.println("❌ Error logging in: " + e.getMessage());
             e.printStackTrace();
         }
         return false;
     }
 
-    // دالة لإنشاء salt عشوائي
     private static byte[] generateSalt() {
         SecureRandom random = new SecureRandom();
         byte[] salt = new byte[SALT_LENGTH];
@@ -201,7 +350,6 @@ class database_BankSystem {
         return salt;
     }
 
-    // دالة لتشفير كلمة المرور باستخدام PBKDF2 مع salt
     private static String hashPassword(String password, byte[] salt) {
         try {
             PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, ITERATIONS, KEY_LENGTH);
@@ -213,7 +361,6 @@ class database_BankSystem {
         }
     }
 
-    // دالة لاسترجاع بيانات المستخدم بناءً على username
     public static UserDetails getUserDetails(String username) {
         String sql = "SELECT full_name, email, mobile, national_id, total_balance, profile_image FROM users WHERE username = ?";
         try (Connection conn = DriverManager.getConnection(DB_URL);
@@ -232,13 +379,12 @@ class database_BankSystem {
                 }
             }
         } catch (SQLException e) {
-            System.out.println("Error retrieving user details: " + e.getMessage());
+            System.out.println("❌ Error retrieving user details: " + e.getMessage());
             e.printStackTrace();
         }
         return null;
     }
 
-    // دالة لاسترجاع بيانات المستخدم بناءً على id
     public static UserDetails getUserDetailsById(int userId) {
         String sql = "SELECT full_name, email, mobile, national_id, total_balance, profile_image FROM users WHERE id = ?";
         try (Connection conn = DriverManager.getConnection(DB_URL);
@@ -257,13 +403,12 @@ class database_BankSystem {
                 }
             }
         } catch (SQLException e) {
-            System.out.println("Error retrieving user details by ID: " + e.getMessage());
+            System.out.println("❌ Error retrieving user details by ID: " + e.getMessage());
             e.printStackTrace();
         }
         return null;
     }
 
-    // دالة استعلام الرصيد
     public static double getBalance(String username) {
         String sql = "SELECT total_balance FROM users WHERE username = ?";
         try (Connection conn = DriverManager.getConnection(DB_URL);
@@ -275,13 +420,12 @@ class database_BankSystem {
                 }
             }
         } catch (SQLException e) {
-            System.out.println("Error retrieving balance: " + e.getMessage());
+            System.out.println("❌ Error retrieving balance: " + e.getMessage());
             e.printStackTrace();
         }
         return -1;
     }
 
-    // دالة الإيداع
     public static boolean deposit(String username, double amount) {
         if (amount <= 0) {
             System.out.println("Deposit amount must be positive.");
@@ -301,7 +445,6 @@ class database_BankSystem {
         return false;
     }
 
-    // دالة السحب
     public static boolean withdraw(String username, double amount) {
         if (amount <= 0) {
             System.out.println("Withdrawal amount must be positive.");
@@ -324,7 +467,6 @@ class database_BankSystem {
         return false;
     }
 
-    // دالة تحديث الرصيد
     private static boolean updateBalance(String username, double newBalance) {
         String sql = "UPDATE users SET total_balance = ? WHERE username = ?";
         try (Connection conn = DriverManager.getConnection(DB_URL);
@@ -334,13 +476,12 @@ class database_BankSystem {
             int rowsUpdated = pstmt.executeUpdate();
             return rowsUpdated > 0;
         } catch (SQLException e) {
-            System.out.println("Error updating balance: " + e.getMessage());
+            System.out.println("❌ Error updating balance: " + e.getMessage());
             e.printStackTrace();
             return false;
         }
     }
 
-    // دالة للتحقق من وجود المستخدم
     public static boolean userExists(String username) {
         String sql = "SELECT 1 FROM users WHERE username = ?";
         try (Connection conn = DriverManager.getConnection(DB_URL);
@@ -350,13 +491,12 @@ class database_BankSystem {
                 return rs.next();
             }
         } catch (SQLException e) {
-            System.out.println("Error checking user existence: " + e.getMessage());
+            System.out.println("❌ Error checking user existence: " + e.getMessage());
             e.printStackTrace();
             return false;
         }
     }
 
-    // دالة للحصول على معرف المستخدم
     private static int getUserId(String username) {
         String sql = "SELECT id FROM users WHERE username = ?";
         try (Connection conn = DriverManager.getConnection(DB_URL);
@@ -368,13 +508,12 @@ class database_BankSystem {
                 }
             }
         } catch (SQLException e) {
-            System.out.println("Error retrieving user ID: " + e.getMessage());
+            System.out.println("❌ Error retrieving user ID: " + e.getMessage());
             e.printStackTrace();
         }
         return -1;
     }
 
-    // دالة لتحديث بيانات المستخدم
     public static boolean updateUserDetails(String username, String fullName, String email, String mobile, String profileImagePath) {
         if (!userExists(username)) {
             System.out.println("User does not exist: " + username);
@@ -391,13 +530,12 @@ class database_BankSystem {
             int rowsUpdated = pstmt.executeUpdate();
             return rowsUpdated > 0;
         } catch (SQLException e) {
-            System.out.println("Error updating user details: " + e.getMessage());
+            System.out.println("❌ Error updating user details: " + e.getMessage());
             e.printStackTrace();
             return false;
         }
     }
 
-    // دالة لتسجيل المعاملات
     public static boolean recordTransaction(int userId, String type, double amount) {
         String sql = "INSERT INTO transactions (user_id, type, amount) VALUES (?, ?, ?)";
         try (Connection conn = DriverManager.getConnection(DB_URL);
@@ -408,13 +546,12 @@ class database_BankSystem {
             pstmt.executeUpdate();
             return true;
         } catch (SQLException e) {
-            System.out.println("Error recording transaction: " + e.getMessage());
+            System.out.println("❌ Error recording transaction: " + e.getMessage());
             e.printStackTrace();
             return false;
         }
     }
 
-    // دالة لتسجيل التحويلات
     public static boolean recordTransfer(String fromUsername, String toUsername, double amount, String status) {
         if (!userExists(fromUsername) || !userExists(toUsername)) {
             System.out.println("One or both users do not exist.");
@@ -430,24 +567,22 @@ class database_BankSystem {
             pstmt.executeUpdate();
             return true;
         } catch (SQLException e) {
-            System.out.println("Error recording transfer: " + e.getMessage());
+            System.out.println("❌ Error recording transfer: " + e.getMessage());
             e.printStackTrace();
             return false;
         }
     }
 
-    // دالة لتحديث تاريخ آخر دخول
     public static boolean updateLastLogin(String username) {
         if (!userExists(username)) {
             System.out.println("User does not exist: " + username);
             return false;
         }
 
-        // التحقق من وجود العمود last_login
         try (Connection conn = DriverManager.getConnection(DB_URL)) {
             addColumnIfNotExists(conn, "users", "last_login", "TEXT");
         } catch (SQLException e) {
-            System.out.println("Error ensuring last_login column exists: " + e.getMessage());
+            System.out.println("❌ Error ensuring last_login column exists: " + e.getMessage());
             return false;
         }
 
@@ -458,19 +593,17 @@ class database_BankSystem {
             int rowsUpdated = pstmt.executeUpdate();
             return rowsUpdated > 0;
         } catch (SQLException e) {
-            System.out.println("Error updating last login: " + e.getMessage());
+            System.out.println("❌ Error updating last login: " + e.getMessage());
             e.printStackTrace();
             return false;
         }
     }
 
-    // دالة للحصول على تاريخ آخر دخول
     public static String getLastLogin(String username) {
-        // التحقق من وجود العمود last_login
         try (Connection conn = DriverManager.getConnection(DB_URL)) {
             addColumnIfNotExists(conn, "users", "last_login", "TEXT");
         } catch (SQLException e) {
-            System.out.println("Error ensuring last_login column exists: " + e.getMessage());
+            System.out.println("❌ Error ensuring last_login column exists: " + e.getMessage());
             return null;
         }
 
@@ -484,7 +617,7 @@ class database_BankSystem {
                 }
             }
         } catch (SQLException e) {
-            System.out.println("Error retrieving last login: " + e.getMessage());
+            System.out.println("❌ Error retrieving last login: " + e.getMessage());
             e.printStackTrace();
         }
         return null;

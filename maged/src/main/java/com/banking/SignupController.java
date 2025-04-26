@@ -151,19 +151,23 @@ public class SignupController {
                 UserSession session = UserSession.getInstance();
                 session.setUsername(usernameField.getText());
 
-                // إرسال بريد إلكتروني تحقق
-                sendVerificationEmail(emailField.getText(), usernameField.getText());
+                // إرسال بريد إلكتروني تحقق مع رمز التحقق
+                boolean emailSent = sendVerificationEmail(emailField.getText(), usernameField.getText());
+                if (emailSent) {
+                    showAlert("Success", "Registration successful! A verification email with a code has been sent to your email address.");
+                } else {
+                    showAlert("Success", "Registration successful! However, we couldn't send a verification email. Please check your email settings.");
+                    return; // إذا فشل إرسال البريد، لا ننتقل إلى صفحة التحقق
+                }
 
-                showAlert("Success", "Registration successful! A verification email has been sent to your email address.");
-
-                // الانتقال إلى صفحة الإعدادات
-                Parent root = FXMLLoader.load(getClass().getResource("/com/example/maged/Settings.fxml"));
+                // الانتقال إلى صفحة التحقق
+                Parent root = FXMLLoader.load(getClass().getResource("/com/example/maged/VerifyEmail.fxml"));
                 Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
                 Scene scene = new Scene(root);
                 scene.getStylesheets().clear();
                 scene.getStylesheets().add(session.isDarkMode() ? "/com/example/maged/DarkMode.css" : "/com/example/maged/LightMode.css");
                 stage.setScene(scene);
-                stage.setTitle("Settings");
+                stage.setTitle("Verify Email");
                 stage.show();
             } else {
                 showAlert("Error", "Registration failed. Username may be taken.");
@@ -173,12 +177,12 @@ public class SignupController {
         }
     }
 
-    private void sendVerificationEmail(String toEmail, String username) {
+    private boolean sendVerificationEmail(String toEmail, String username) {
         // إعدادات SMTP لـ Gmail
         String host = "smtp.gmail.com";
         String port = "587";
-        String mailFrom = "mohamedamgad7777@gmail.com"; // استبدل هذا بعنوان بريدك الإلكتروني
-        String password = "xnpvkxlplwtqscbg";   // استبدل هذا بكلمة المرور التي حصلت عليها من App Password
+        String mailFrom = "mohamedamgad7777@gmail.com";
+        String password = "xnpvkxlplwtqscbg";
 
         // إعداد خصائص البريد
         Properties properties = new Properties();
@@ -186,6 +190,7 @@ public class SignupController {
         properties.put("mail.smtp.starttls.enable", "true");
         properties.put("mail.smtp.host", host);
         properties.put("mail.smtp.port", port);
+        properties.put("mail.debug", "true");
 
         // إنشاء جلسة بريد
         Session session = Session.getInstance(properties, new Authenticator() {
@@ -196,23 +201,60 @@ public class SignupController {
         });
 
         try {
+            // توليد وتخزين كود التحقق باستخدام قاعدة البيانات
+            String verificationCode = database_BankSystem.generateAndSaveVerificationCode(username);
+            if (verificationCode == null) {
+                System.out.println("❌ Failed to generate or save verification code for " + username);
+                return false;
+            }
+
             // إنشاء رسالة بريد إلكتروني
             MimeMessage message = new MimeMessage(session);
             message.setFrom(new InternetAddress(mailFrom));
             message.addRecipient(Message.RecipientType.TO, new InternetAddress(toEmail));
-            message.setSubject("Welcome to BMA Bank - Account Verification");
-            message.setText("Dear " + username + ",\n\n" +
-                    "Thank you for registering with BMA Bank!\n" +
-                    "Your account has been successfully created.\n\n" +
-                    "Best regards,\n" +
-                    "BMA Bank Team");
+            message.setSubject("Welcome to BMA Bank - Verify Your Email");
+
+            // إعداد محتوى الرسالة بتنسيق HTML مع رمز التحقق
+            String htmlContent = """
+                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px; background-color: #f9f9f9;'>
+                    <h2 style='color: #2c3e50; text-align: center;'>Welcome to BMA Bank!</h2>
+                    <p style='color: #34495e; font-size: 16px;'>Dear %s,</p>
+                    <p style='color: #34495e; font-size: 16px;'>Thank you for joining BMA Bank! To complete your registration, please verify your email address using the code below:</p>
+                    <div style='text-align: center; margin: 20px 0;'>
+                        <h3 style='color: #4CAF50; background-color: #e8f5e9; display: inline-block; padding: 10px 20px; border-radius: 5px; letter-spacing: 2px;'>
+                            %s
+                        </h3>
+                    </div>
+                    <p style='color: #34495e; font-size: 16px;'>Enter this code in the app to activate your account. <strong>This code is valid for 10 minutes.</strong></p>
+                    <p style='color: #34495e; font-size: 16px;'>If you didn’t request this, please ignore this email or contact our support team.</p>
+                    <p style='color: #34495e; font-size: 16px;'>
+                        Need help? Feel free to reach out at 
+                        <a href='mailto:support@bmabank.com' style='color: #4CAF50; text-decoration: none;'>support@bmabank.com</a>.
+                    </p>
+                    <p style='color: #34495e; font-size: 16px; text-align: center; margin-top: 30px;'>
+                        Best regards,<br>
+                        <strong style='color: #2c3e50;'>BMA Bank Team</strong>
+                    </p>
+                </div>
+                """.formatted(username, verificationCode);
+            message.setContent(htmlContent, "text/html; charset=utf-8");
 
             // إرسال الرسالة
             Transport.send(message);
-            System.out.println("Verification email sent successfully to " + toEmail);
+            System.out.println("✅ Verification email sent successfully to " + toEmail + " with code: " + verificationCode);
+
+            // تحقق إضافي إن الكود اتخزن في قاعدة البيانات
+            String storedCode = database_BankSystem.getVerificationCode(username);
+            if (storedCode == null || !storedCode.equals(verificationCode)) {
+                System.out.println("❌ Verification code not found in database after sending email for " + username);
+                return false;
+            }
+
+            return true;
         } catch (MessagingException e) {
-            System.out.println("Failed to send verification email: " + e.getMessage());
+            System.out.println("❌ Failed to send verification email: " + e.getMessage());
             e.printStackTrace();
+            return false;
         }
     }
 

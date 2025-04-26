@@ -6,19 +6,62 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.scene.control.Alert;
-import javafx.scene.control.PasswordField;
-import javafx.scene.control.TextField;
+import javafx.scene.control.*;
 import javafx.stage.Stage;
+
 import java.io.IOException;
 
 public class LoginController {
+
     @FXML private TextField usernameField;
     @FXML private PasswordField passwordField;
+    @FXML private Label usernameError;
+    @FXML private Label passwordError;
+    @FXML private Button loginButton;
 
+    @FXML
     public void initialize() {
-        // لا حاجة لتغيير الـ stylesheet هنا لأنه معرف في FXML
-        // لكن يمكننا التأكد من تطبيق الوضع عند التنقل
+        // التحقق من أن الحقول ليست null قبل إضافة المستمعين
+        if (usernameField != null) {
+            usernameField.textProperty().addListener((obs, oldVal, newVal) -> validateForm());
+        }
+        if (passwordField != null) {
+            passwordField.textProperty().addListener((obs, oldVal, newVal) -> validateForm());
+        }
+        validateForm();
+    }
+
+    private void validateForm() {
+        boolean valid = true;
+
+        // التحقق من usernameField
+        if (usernameField == null || usernameField.getText().isEmpty()) {
+            if (usernameError != null) {
+                usernameError.setText("Username is required");
+            }
+            valid = false;
+        } else {
+            if (usernameError != null) {
+                usernameError.setText("");
+            }
+        }
+
+        // التحقق من passwordField
+        if (passwordField == null || passwordField.getText().isEmpty()) {
+            if (passwordError != null) {
+                passwordError.setText("Password is required");
+            }
+            valid = false;
+        } else {
+            if (passwordError != null) {
+                passwordError.setText("");
+            }
+        }
+
+        // تعطيل زر الدخول إذا لم تكن البيانات صالحة
+        if (loginButton != null) {
+            loginButton.setDisable(!valid);
+        }
     }
 
     @FXML
@@ -26,31 +69,39 @@ public class LoginController {
         String username = usernameField.getText();
         String password = passwordField.getText();
 
-        // التحقق من بيانات الدخول باستخدام database_BankSystem
-        boolean isValidLogin = database_BankSystem.loginUser(username, password);
+        // التحقق مما إذا كان المستخدم قد تحقق من بريده الإلكتروني
+        if (!database_BankSystem.isUserVerified(username)) {
+            showAlert("Error", "Please verify your email address before logging in.");
+            // الانتقال إلى صفحة التحقق
+            UserSession session = UserSession.getInstance();
+            session.setUsername(username);
+            Parent root = FXMLLoader.load(getClass().getResource("/com/example/maged/VerifyEmail.fxml"));
+            Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
+            Scene scene = new Scene(root);
+            scene.getStylesheets().clear();
+            scene.getStylesheets().add(session.isDarkMode() ? "/com/example/maged/DarkMode.css" : "/com/example/maged/LightMode.css");
+            stage.setScene(scene);
+            stage.setTitle("Verify Email");
+            stage.show();
+            return;
+        }
 
-        if (isValidLogin) {
-            // تخزين username في UserSession
+        boolean isAuthenticated = database_BankSystem.loginUser(username, password);
+        if (isAuthenticated) {
             UserSession session = UserSession.getInstance();
             session.setUsername(username);
             database_BankSystem.updateLastLogin(username);
 
-            try {
-                // تحميل واجهة الإعدادات
-                Parent root = FXMLLoader.load(getClass().getResource("/com/example/maged/Settings.fxml"));
-                Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
-                Scene scene = new Scene(root);
-                scene.getStylesheets().clear();
-                scene.getStylesheets().add(session.isDarkMode() ? "/com/example/maged/DarkMode.css" : "/com/example/maged/LightMode.css");
-                stage.setScene(scene);
-                stage.setTitle("Settings");
-                stage.show();
-            } catch (IOException e) {
-                e.printStackTrace();
-                showAlert("Error", "Failed to load Settings page: " + e.getMessage());
-            }
+            Parent root = FXMLLoader.load(getClass().getResource("/com/example/maged/Settings.fxml"));
+            Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
+            Scene scene = new Scene(root);
+            scene.getStylesheets().clear();
+            scene.getStylesheets().add(session.isDarkMode() ? "/com/example/maged/DarkMode.css" : "/com/example/maged/LightMode.css");
+            stage.setScene(scene);
+            stage.setTitle("Settings");
+            stage.show();
         } else {
-            showAlert("Error", "Invalid username or password.");
+            showAlert("Error", "Invalid username or password");
         }
     }
 
@@ -63,7 +114,7 @@ public class LoginController {
         scene.getStylesheets().clear();
         scene.getStylesheets().add(session.isDarkMode() ? "/com/example/maged/DarkMode.css" : "/com/example/maged/LightMode.css");
         stage.setScene(scene);
-        stage.setTitle("Sign Up");
+        stage.setTitle("Signup");
         stage.show();
     }
 
