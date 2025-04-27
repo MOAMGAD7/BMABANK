@@ -150,6 +150,8 @@ public class SignupController {
                 // تخزين username في UserSession
                 UserSession session = UserSession.getInstance();
                 session.setUsername(usernameField.getText());
+                session.setRequestSource("Signup"); // تعيين المصدر
+                System.out.println("Setting Request Source in SignupController: " + session.getRequestSource()); // سجل للتأكد
 
                 // إرسال بريد إلكتروني تحقق مع رمز التحقق
                 boolean emailSent = sendVerificationEmail(emailField.getText(), usernameField.getText());

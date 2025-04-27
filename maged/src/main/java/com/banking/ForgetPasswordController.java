@@ -10,45 +10,87 @@ import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.stage.Stage;
 
+import jakarta.mail.*;
+import jakarta.mail.internet.*;
 import java.io.IOException;
+import java.util.Properties;
 
 public class ForgetPasswordController {
 
     @FXML private TextField emailField;
     @FXML private Label errorLabel;
 
+    // Email settings (SMTP)
+    private static final String SMTP_HOST = "smtp.gmail.com";
+    private static final String SMTP_PORT = "587";
+    private static final String SENDER_EMAIL = "mohamedamgad7777@gmail.com"; // Replace with your Gmail address
+    private static final String SENDER_PASSWORD = "xnpvkxlplwtqscbg"; // Replace with your App Password
+
+    @FXML
+    public void initialize() {
+        // Debugging to check if fields are initialized
+        if (emailField == null) {
+            System.out.println("❌ emailField is null - FXML binding issue");
+        }
+        if (errorLabel == null) {
+            System.out.println("❌ errorLabel is null - FXML binding issue");
+        }
+    }
+
     @FXML
     protected void handleSendCode(ActionEvent event) throws IOException {
         String email = emailField.getText();
 
         if (email.isEmpty()) {
-            errorLabel.setText("Please enter your email.");
+            if (errorLabel != null) {
+                errorLabel.setText("Please enter your email");
+            } else {
+                System.out.println("Error: Cannot set error message - errorLabel is null");
+            }
             return;
         }
 
-        // البحث عن المستخدم بناءً على الإيميل
+        // Find user by email
         String username = database_BankSystem.getUsernameByEmail(email);
         if (username == null) {
-            errorLabel.setText("No user found with this email.");
+            if (errorLabel != null) {
+                errorLabel.setText("No user found with this email");
+            } else {
+                System.out.println("Error: Cannot set error message - errorLabel is null");
+            }
             return;
         }
 
-        // توليد كود تحقق وحفظه
+        // Generate and save verification code
         String code = database_BankSystem.generateAndSaveVerificationCode(username);
         if (code == null) {
-            errorLabel.setText("Failed to generate verification code.");
+            if (errorLabel != null) {
+                errorLabel.setText("Failed to generate verification code, please try again");
+            } else {
+                System.out.println("Error: Cannot set error message - errorLabel is null");
+            }
             return;
         }
 
-        // هنا المفروض ترسل الإيميل بالكود (لكن مش هننفذ ده دلوقتي)
-        System.out.println("✅ Verification code sent to " + email + ": " + code);
+        // Send the verification code via email
+        boolean emailSent = sendVerificationEmail(email, code);
+        if (!emailSent) {
+            if (errorLabel != null) {
+                errorLabel.setText("Failed to send email, please try again");
+            } else {
+                System.out.println("Error: Cannot set error message - errorLabel is null");
+            }
+            return;
+        }
 
-        // ضبط الـ session
+        // Update session
         UserSession session = UserSession.getInstance();
         session.setUsername(username);
-        session.setPasswordReset(true); // ضبط الحالة عشان نعرف إن المستخدم جاي من Forget Password
+        session.setPasswordReset(true);
+        session.setRequestSource("ForgetPassword"); // تعيين المصدر
+        System.out.println("Setting Request Source in ForgetPasswordController: " + session.getRequestSource()); // سجل للتأكد
 
-        // الانتقال لصفحة التحقق
+        // Navigate to the verification page
         Parent root = FXMLLoader.load(getClass().getResource("/com/example/maged/VerifyEmail.fxml"));
         Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
         Scene scene = new Scene(root);
@@ -60,9 +102,8 @@ public class ForgetPasswordController {
     }
 
     @FXML
-    protected void switchToLogin(ActionEvent event) throws IOException { // Renamed from handleBackToLogin to switchToLogin
-        // العودة لصفحة تسجيل الدخول
-        Parent root = FXMLLoader.load(getClass().getResource("/com/example/maged/login.fxml"));
+    protected void switchToLogin(ActionEvent event) throws IOException {
+        Parent root = FXMLLoader.load(getClass().getResource("/com/example/maged/Login.fxml"));
         Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
         Scene scene = new Scene(root);
         UserSession session = UserSession.getInstance();
@@ -71,5 +112,39 @@ public class ForgetPasswordController {
         stage.setScene(scene);
         stage.setTitle("Login");
         stage.show();
+    }
+
+    // Method to send email
+    private boolean sendVerificationEmail(String recipientEmail, String verificationCode) {
+        Properties props = new Properties();
+        props.put("mail.smtp.auth", "true");
+        props.put("mail.smtp.starttls.enable", "true");
+        props.put("mail.smtp.host", SMTP_HOST);
+        props.put("mail.smtp.port", SMTP_PORT);
+        props.put("mail.smtp.ssl.trust", "smtp.gmail.com"); // Trust Gmail's SMTP server
+        props.put("mail.debug", "true"); // Enable debug output for more details
+
+        Session session = Session.getInstance(props, new Authenticator() {
+            @Override
+            protected PasswordAuthentication getPasswordAuthentication() {
+                return new PasswordAuthentication(SENDER_EMAIL, SENDER_PASSWORD);
+            }
+        });
+
+        try {
+            Message message = new MimeMessage(session);
+            message.setFrom(new InternetAddress(SENDER_EMAIL));
+            message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(recipientEmail));
+            message.setSubject("Password Reset Verification Code");
+            message.setText("Hello,\n\nYour verification code to reset your password is: " + verificationCode + "\n\nBest regards,\nBank Team");
+
+            Transport.send(message);
+            System.out.println("✅ Verification email sent successfully to " + recipientEmail);
+            return true;
+        } catch (MessagingException e) {
+            System.out.println("❌ Error sending verification email: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
     }
 }

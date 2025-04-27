@@ -26,12 +26,17 @@
             <artifactId>javafx-fxml</artifactId>
             <version>21.0.7</version>
         </dependency>
-        <!-- SQLite JDBC Driver -->
 
         <!-- Jakarta Mail for Sending Emails -->
         <dependency>
             <groupId>com.sun.mail</groupId>
             <artifactId>jakarta.mail</artifactId>
+            <version>2.0.1</version>
+        </dependency>
+        <!-- Jakarta Activation (required for jakarta.mail to work properly) -->
+        <dependency>
+            <groupId>com.sun.activation</groupId>
+            <artifactId>jakarta.activation</artifactId>
             <version>2.0.1</version>
         </dependency>
     </dependencies>
@@ -41,8 +46,7 @@
             <resource>
                 <directory>src/main/resources</directory>
                 <includes>
-                    <include>**/*.fxml</include>
-                    <include>**/*.css</include>
+                    <include>**/*.*</include> <!-- Include all files in resources -->
                 </includes>
             </resource>
         </resources>
@@ -63,6 +67,23 @@
                 <configuration>
                     <mainClass>com.banking.Main</mainClass>
                 </configuration>
+            </plugin>
+            <!-- Add Maven Dependency Plugin to help identify and exclude conflicting dependencies -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.6.1</version>
+                <executions>
+                    <execution>
+                        <id>analyze</id>
+                        <goals>
+                            <goal>analyze-only</goal>
+                        </goals>
+                        <configuration>
+                            <failOnWarning>false</failOnWarning>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

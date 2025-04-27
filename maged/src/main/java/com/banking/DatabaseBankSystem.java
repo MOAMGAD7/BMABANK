@@ -12,7 +12,7 @@ class database_BankSystem {
     private static final String DB_URL = "jdbc:sqlite:bank.db";
     private static final int SALT_LENGTH = 16;
     private static final int ITERATIONS = 65536;
-    private static final int KEY_LENGTH = 128;
+    private static final int KEY_LENGTH = 256;
     private static final int CODE_LENGTH = 6;
 
     public static class UserDetails {
@@ -64,7 +64,8 @@ class database_BankSystem {
             String verificationCodesTable = """
                     CREATE TABLE IF NOT EXISTS verification_codes (
                         username TEXT PRIMARY KEY,
-                        code TEXT NOT NULL
+                        code TEXT NOT NULL,
+                        FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
                     )
                     """;
 
@@ -113,6 +114,7 @@ class database_BankSystem {
             addColumnIfNotExists(conn, "users", "last_login", "TEXT");
             addColumnIfNotExists(conn, "users", "is_verified", "BOOLEAN NOT NULL DEFAULT 0");
 
+            System.out.println("Tables created successfully.");
         } catch (SQLException e) {
             System.out.println("Error creating tables: " + e.getMessage());
             e.printStackTrace();
@@ -202,6 +204,38 @@ class database_BankSystem {
         }
     }
 
+    public static String getEmailByUsername(String username) {
+        if (username == null || username.trim().isEmpty()) {
+            System.out.println("❌ Cannot retrieve email: Username is null or empty.");
+            return null;
+        }
+
+        String sql = "SELECT email FROM users WHERE username = ?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, username);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    String email = rs.getString("email");
+                    if (email != null) {
+                        System.out.println("✅ Retrieved email for username " + username + ": " + email);
+                        return email;
+                    } else {
+                        System.out.println("❌ Email is null for username: " + username);
+                        return null;
+                    }
+                } else {
+                    System.out.println("❌ No user found with username: " + username);
+                    return null;
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("❌ Error retrieving email by username: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+
     public static boolean updatePassword(String username, String newPassword) {
         if (username == null || username.trim().isEmpty() || newPassword == null || newPassword.trim().isEmpty()) {
             System.out.println("❌ Cannot update password: Username or new password is null or empty.");
@@ -213,7 +247,6 @@ class database_BankSystem {
             return false;
         }
 
-        // توليد salt جديد وتشفير كلمة المرور الجديدة
         byte[] salt = generateSalt();
         String hashedPassword = hashPassword(newPassword, salt);
         String saltBase64 = Base64.getEncoder().encodeToString(salt);
@@ -252,52 +285,22 @@ class database_BankSystem {
 
         SecureRandom random = new SecureRandom();
         String code = String.valueOf(random.nextInt(999999 - 100000 + 1) + 100000);
-        System.out.println("✅ Generated verification code for " + username + ": " + code);
 
         String sql = "INSERT OR REPLACE INTO verification_codes (username, code) VALUES (?, ?)";
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
-            conn.setAutoCommit(false);
-            try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
-                pstmt.setString(1, username);
-                pstmt.setString(2, code);
-                int rowsAffected = pstmt.executeUpdate();
-                System.out.println("Rows affected in verification_codes: " + rowsAffected);
-
-                if (rowsAffected == 0) {
-                    System.out.println("❌ Failed to insert verification code for " + username + " into verification_codes table.");
-                    conn.rollback();
-                    return null;
-                }
-
-                conn.commit();
-                System.out.println("✅ Changes committed for verification code insertion for " + username);
-
-                // تحقق فوري باستخدام نفس الاتصال
-                String verifySql = "SELECT code FROM verification_codes WHERE username = ?";
-                try (PreparedStatement verifyStmt = conn.prepareStatement(verifySql)) {
-                    verifyStmt.setString(1, username);
-                    try (ResultSet rs = verifyStmt.executeQuery()) {
-                        if (rs.next()) {
-                            String storedCode = rs.getString("code");
-                            System.out.println("✅ Immediate verification - Stored code for " + username + ": " + storedCode);
-                            return code;
-                        } else {
-                            System.out.println("❌ Immediate verification failed: No code found in database for " + username + " after insertion.");
-                            conn.rollback();
-                            return null;
-                        }
-                    }
-                }
-            } catch (SQLException e) {
-                System.out.println("❌ Error during verification code insertion or immediate verification: " + e.getMessage());
-                e.printStackTrace();
-                conn.rollback();
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, username);
+            pstmt.setString(2, code);
+            int rowsAffected = pstmt.executeUpdate();
+            if (rowsAffected > 0) {
+                System.out.println("✅ Generated and saved verification code for " + username + ": " + code);
+                return code;
+            } else {
+                System.out.println("❌ Failed to save verification code for " + username);
                 return null;
-            } finally {
-                conn.setAutoCommit(true);
             }
         } catch (SQLException e) {
-            System.out.println("❌ Error managing database connection for insertion: " + e.getMessage());
+            System.out.println("❌ Error saving verification code: " + e.getMessage());
             e.printStackTrace();
             return null;
         }
@@ -325,32 +328,28 @@ class database_BankSystem {
         }
     }
 
+    private static void deleteVerificationCode(String username) {
+        String sql = "DELETE FROM verification_codes WHERE username = ?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, username);
+            pstmt.executeUpdate();
+            System.out.println("✅ Deleted verification code for " + username);
+        } catch (SQLException e) {
+            System.out.println("❌ Error deleting verification code: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
     public static boolean verifyCode(String username, String code) {
         String storedCode = getVerificationCode(username);
         if (storedCode == null) {
-            System.out.println("❌ No verification code found for " + username);
+            System.out.println("❌ No valid verification code found for " + username);
             return false;
         }
 
         if (storedCode.equals(code)) {
-            try (Connection conn = DriverManager.getConnection(DB_URL)) {
-                String updateSql = "UPDATE users SET is_verified = 1 WHERE username = ?";
-                try (PreparedStatement updatePstmt = conn.prepareStatement(updateSql)) {
-                    updatePstmt.setString(1, username);
-                    updatePstmt.executeUpdate();
-                }
-
-                String deleteSql = "DELETE FROM verification_codes WHERE username = ?";
-                try (PreparedStatement deletePstmt = conn.prepareStatement(deleteSql)) {
-                    deletePstmt.setString(1, username);
-                    deletePstmt.executeUpdate();
-                }
-            } catch (SQLException e) {
-                System.out.println("❌ Error during verification process: " + e.getMessage());
-                e.printStackTrace();
-                return false;
-            }
-
+            deleteVerificationCode(username);
             System.out.println("✅ Verification successful for " + username);
             return true;
         } else {

@@ -12,6 +12,6 @@
     <Label text="A verification code has been sent to your email. Please enter the code below:" styleClass="label"/>
     <TextField fx:id="codeField" promptText="Enter verification code" styleClass="text-field"/>
     <Label fx:id="codeError" styleClass="label" style="-fx-text-fill: red;"/>
-    <Button fx:id="verifyButton" text="Verify" onAction="#handleVerify" styleClass="button"/>
+    <Button fx:id="verifyButton" text="Verify" onAction="#handleVerifyCode" styleClass="button"/>
     <Button text="Back to Login" onAction="#switchToLogin" styleClass="button"/>
 </VBox>
