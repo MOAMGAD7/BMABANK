@@ -6,19 +6,19 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
 
-public class Main extends Application {
+import java.io.IOException;
 
+public class Main extends Application {
     @Override
-    public void start(Stage primaryStage) throws Exception {
-        // Initialize database tables
+    public void start(Stage primaryStage) throws IOException {
+        // إنشاء الجداول في قاعدة البيانات عند بدء التطبيق
         database_BankSystem.createTables();
 
-        // Load the initial scene (e.g., Login page)
-        Parent root = FXMLLoader.load(getClass().getResource("/com/example/maged/Login.fxml"));
-        Scene scene = new Scene(root);
-        scene.getStylesheets().add(UserSession.getInstance().isDarkMode() ? "/com/example/maged/DarkMode.css" : "/com/example/maged/LightMode.css");
+        // تحميل واجهة تسجيل الدخول
+        Parent root = FXMLLoader.load(getClass().getResource("/com/example/maged/login.fxml"));
+        Scene scene = new Scene(root ,1024,600);
+        primaryStage.setTitle("Banking System");
         primaryStage.setScene(scene);
-        primaryStage.setTitle("Bank App");
         primaryStage.show();
     }
 
